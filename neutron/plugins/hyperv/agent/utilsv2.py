@@ -43,6 +43,10 @@ class HyperVUtilsV2(utils.HyperVUtils):
     _ACL_ACTION_DENY = 2
     _ACL_ACTION_METER = 3
 
+    _METRIC_ENABLED = 2
+    _NET_IN_METRIC_NAME = 'Filtered Incoming Network Traffic'
+    _NET_OUT_METRIC_NAME = 'Filtered Outgoing Network Traffic'
+
     _ACL_APPLICABILITY_LOCAL = 1
     _ACL_APPLICABILITY_REMOTE = 2
 
@@ -211,6 +215,25 @@ class HyperVUtilsV2(utils.HyperVUtils):
                     acl = self._create_acl(
                         acl_dir, acl_type, self._ACL_ACTION_METER)
                     self._add_virt_feature(port, acl)
+                    while not _acls:
+                        acls = port.associators(wmi_result_class=self._PORT_ALLOC_ACL_SET_DATA)
+                        _acls = self._filter_acls(
+                            acls, self._ACL_ACTION_METER, acl_dir, acl_type)
+                        time.sleep(1)
+
+        self._enable_control_metrics(port)
+
+    def _enable_control_metrics(self, port):
+        metric_svc = self._conn.Msvm_MetricService()[0]
+        metric_names = [self._NET_IN_METRIC_NAME, self._NET_OUT_METRIC_NAME]
+
+        for metric_name in metric_names:
+            metric_def = self._conn.CIM_BaseMetricDefinition(Name=metric_name)
+            if metric_def:
+                metric_svc.ControlMetrics(
+                    Subject=port.path_(),
+                    Definition=metric_def[0].path_(),
+                    MetricCollectionEnabled=self._METRIC_ENABLED)
 
     def create_security_rule(self, switch_port_name, direction, acl_type,
                              local_port, protocol, remote_address):
